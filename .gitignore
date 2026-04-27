@@ -1,0 +1,15 @@
+# TPC-DS data — too large for GitHub (store_sales.csv is ~93 MB)
+cis4301sp26_project/tpcds_data/
+
+# Local credentials — never commit per project spec
+cis4301sp26_project/MARIADB_CREDS.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
