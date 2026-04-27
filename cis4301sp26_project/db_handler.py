@@ -122,34 +122,66 @@ def rent_item(item_id: str = None, customer_id: str = None):
     item_id - A string containing the Item ID for the item being rented.
     customer_id - A string containing the customer id of the customer renting the item.
     """
-    raise NotImplementedError("you must implement this function")
+    rental_date = date.today().isoformat()
+    due_date = (date.today() + timedelta(days=14)).isoformat()
+    cur.execute(
+        "INSERT INTO rental (item_id, customer_id, rental_date, due_date) VALUES (?, ?, ?, ?)",
+        (item_id, customer_id, rental_date, due_date)
+    )
 
 
 def waitlist_customer(item_id: str = None, customer_id: str = None) -> int:
     """
     Returns the customer's new place in line.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("SELECT COUNT(*) FROM waitlist WHERE item_id = ?", (item_id,))
+    new_place = cur.fetchone()[0] + 1
+    cur.execute(
+        "INSERT INTO waitlist (item_id, customer_id, place_in_line) VALUES (?, ?, ?)",
+        (item_id, customer_id, new_place)
+    )
+    return new_place
 
 def update_waitlist(item_id: str = None):
     """
     Removes person at position 1 and shifts everyone else down by 1.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute(
+        "DELETE FROM waitlist WHERE item_id = ? AND place_in_line = 1",
+        (item_id,)
+    )
+    cur.execute(
+        "UPDATE waitlist SET place_in_line = place_in_line - 1 WHERE item_id = ?",
+        (item_id,)
+    )
 
 
 def return_item(item_id: str = None, customer_id: str = None):
     """
     Moves a rental from rental to rental_history with return_date = today.
     """
-    raise NotImplementedError("you must implement this function")
+    today = date.today().isoformat()
+    cur.execute(
+        "INSERT INTO rental_history (item_id, customer_id, rental_date, due_date, return_date) "
+        "SELECT item_id, customer_id, rental_date, due_date, ? FROM rental "
+        "WHERE item_id = ? AND customer_id = ?",
+        (today, item_id, customer_id)
+    )
+    cur.execute(
+        "DELETE FROM rental WHERE item_id = ? AND customer_id = ?",
+        (item_id, customer_id)
+    )
 
 
 def grant_extension(item_id: str = None, customer_id: str = None):
     """
     Adds 14 days to the due_date.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute(
+        "UPDATE rental SET due_date = due_date + INTERVAL 14 DAY "
+        "WHERE item_id = ? AND customer_id = ?",
+        (item_id, customer_id)
+    )
 
 
 def get_filtered_items(filter_attributes: Item = None,
