@@ -72,7 +72,49 @@ def edit_customer(original_customer_id: str = None, new_customer: Customer = Non
     original_customer_id - A string containing the customer id for the customer to be edited.
     new_customer - A Customer object containing attributes to update. If an attribute is None, it should not be altered.
     """
-    raise NotImplementedError("you must implement this function")
+    # Look up the address SK before any updates so the lookup still works
+    # even if c_customer_id is being changed in this call.
+    addr_sk = None
+    if new_customer.address is not None:
+        cur.execute(
+            "SELECT c_current_addr_sk FROM customer WHERE c_customer_id = ?",
+            (original_customer_id,)
+        )
+        row = cur.fetchone()
+        if row is not None:
+            addr_sk = row[0]
+
+    set_clauses = []
+    params = []
+
+    if new_customer.customer_id is not None:
+        set_clauses.append("c_customer_id = ?")
+        params.append(new_customer.customer_id)
+    if new_customer.name is not None:
+        first_name, last_name = new_customer.name.split(" ", 1)
+        set_clauses.append("c_first_name = ?")
+        params.append(first_name)
+        set_clauses.append("c_last_name = ?")
+        params.append(last_name)
+    if new_customer.email is not None:
+        set_clauses.append("c_email_address = ?")
+        params.append(new_customer.email)
+
+    if set_clauses:
+        sql = "UPDATE customer SET " + ", ".join(set_clauses) + " WHERE c_customer_id = ?"
+        params.append(original_customer_id)
+        cur.execute(sql, params)
+
+    if new_customer.address is not None and addr_sk is not None:
+        street_full, city, state_zip = new_customer.address.split(", ")
+        street_number, street_name = street_full.split(" ", 1)
+        state, zip_code = state_zip.split(" ", 1)
+
+        cur.execute(
+            "UPDATE customer_address SET ca_street_number = ?, ca_street_name = ?, "
+            "ca_city = ?, ca_state = ?, ca_zip = ? WHERE ca_address_sk = ?",
+            (street_number, street_name, city, state, zip_code, addr_sk)
+        )
 
 
 def rent_item(item_id: str = None, customer_id: str = None):
@@ -286,7 +328,62 @@ def get_filtered_rental_histories(filter_attributes: RentalHistory = None,
     """
     Returns a list of RentalHistory objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    where = []
+    params = []
+
+    if filter_attributes is not None:
+        if filter_attributes.item_id is not None:
+            where.append("item_id = ?")
+            params.append(filter_attributes.item_id)
+        if filter_attributes.customer_id is not None:
+            where.append("customer_id = ?")
+            params.append(filter_attributes.customer_id)
+        if filter_attributes.rental_date is not None:
+            where.append("rental_date = ?")
+            params.append(filter_attributes.rental_date)
+        if filter_attributes.due_date is not None:
+            where.append("due_date = ?")
+            params.append(filter_attributes.due_date)
+        if filter_attributes.return_date is not None:
+            where.append("return_date = ?")
+            params.append(filter_attributes.return_date)
+
+    if min_rental_date is not None:
+        where.append("rental_date >= ?")
+        params.append(min_rental_date)
+    if max_rental_date is not None:
+        where.append("rental_date <= ?")
+        params.append(max_rental_date)
+    if min_due_date is not None:
+        where.append("due_date >= ?")
+        params.append(min_due_date)
+    if max_due_date is not None:
+        where.append("due_date <= ?")
+        params.append(max_due_date)
+    if min_return_date is not None:
+        where.append("return_date >= ?")
+        params.append(min_return_date)
+    if max_return_date is not None:
+        where.append("return_date <= ?")
+        params.append(max_return_date)
+
+    sql = "SELECT item_id, customer_id, rental_date, due_date, return_date FROM rental_history"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+
+    histories = []
+    for r in rows:
+        histories.append(RentalHistory(
+            item_id=r[0].strip() if r[0] is not None else None,
+            customer_id=r[1].strip() if r[1] is not None else None,
+            rental_date=str(r[2]) if r[2] is not None else None,
+            due_date=str(r[3]) if r[3] is not None else None,
+            return_date=str(r[4]) if r[4] is not None else None,
+        ))
+    return histories
 
 
 def get_filtered_waitlist(filter_attributes: Waitlist = None,
@@ -317,11 +414,14 @@ def place_in_line(item_id: str = None, customer_id: str = None) -> int:
     """
     Returns the customer's place_in_line, or -1 if not on waitlist.
     """
-    cur.execute("SELECT place_in_line FROM waitlist WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
+    cur.execute(
+        "SELECT place_in_line FROM waitlist WHERE item_id = ? AND customer_id = ?",
+        (item_id, customer_id)
+    )
     row = cur.fetchone()
     if row is None:
         return -1
-    raise NotImplementedError("you must implement this function")
+    return row[0]
 
 
 def line_length(item_id: str = None) -> int:
