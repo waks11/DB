@@ -83,14 +83,118 @@ def get_filtered_items(filter_attributes: Item = None,
     """
     Returns a list of Item objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    where = []
+    params = []
+    op = "LIKE" if use_patterns else "="
+
+    if filter_attributes is not None:
+        if filter_attributes.item_id is not None:
+            where.append(f"i_item_id {op} ?")
+            params.append(filter_attributes.item_id)
+        if filter_attributes.product_name is not None:
+            where.append(f"i_product_name {op} ?")
+            params.append(filter_attributes.product_name)
+        if filter_attributes.brand is not None:
+            where.append(f"i_brand {op} ?")
+            params.append(filter_attributes.brand)
+        if filter_attributes.category is not None:
+            where.append(f"i_category {op} ?")
+            params.append(filter_attributes.category)
+        if filter_attributes.manufact is not None:
+            where.append(f"i_manufact {op} ?")
+            params.append(filter_attributes.manufact)
+        if filter_attributes.current_price != -1:
+            where.append("i_current_price = ?")
+            params.append(filter_attributes.current_price)
+        if filter_attributes.start_year != -1:
+            where.append("YEAR(i_rec_start_date) = ?")
+            params.append(filter_attributes.start_year)
+        if filter_attributes.num_owned != -1:
+            where.append("i_num_owned = ?")
+            params.append(filter_attributes.num_owned)
+
+    if min_price != -1:
+        where.append("i_current_price >= ?")
+        params.append(min_price)
+    if max_price != -1:
+        where.append("i_current_price <= ?")
+        params.append(max_price)
+    if min_start_year != -1:
+        where.append("YEAR(i_rec_start_date) >= ?")
+        params.append(min_start_year)
+    if max_start_year != -1:
+        where.append("YEAR(i_rec_start_date) <= ?")
+        params.append(max_start_year)
+
+    sql = ("SELECT i_item_id, i_product_name, i_brand, i_category, i_manufact, "
+           "i_current_price, YEAR(i_rec_start_date), i_num_owned FROM item")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+
+    items = []
+    for r in rows:
+        items.append(Item(
+            item_id=r[0].strip() if r[0] is not None else None,
+            product_name=r[1].strip() if r[1] is not None else None,
+            brand=r[2].strip() if r[2] is not None else None,
+            category=r[3].strip() if r[3] is not None else None,
+            manufact=r[4].strip() if r[4] is not None else None,
+            current_price=float(r[5]) if r[5] is not None else -1,
+            start_year=int(r[6]) if r[6] is not None else -1,
+            num_owned=int(r[7]) if r[7] is not None else -1,
+        ))
+    return items
 
 
 def get_filtered_customers(filter_attributes: Customer = None, use_patterns: bool = False) -> list[Customer]:
     """
     Returns a list of Customer objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    where = []
+    params = []
+    op = "LIKE" if use_patterns else "="
+
+    name_expr = "CONCAT(TRIM(c_first_name), ' ', TRIM(c_last_name))"
+    addr_expr = ("CONCAT(TRIM(ca_street_number), ' ', TRIM(ca_street_name), ', ', "
+                 "TRIM(ca_city), ', ', TRIM(ca_state), ' ', TRIM(ca_zip))")
+
+    if filter_attributes is not None:
+        if filter_attributes.customer_id is not None:
+            where.append(f"c_customer_id {op} ?")
+            params.append(filter_attributes.customer_id)
+        if filter_attributes.name is not None:
+            where.append(f"{name_expr} {op} ?")
+            params.append(filter_attributes.name)
+        if filter_attributes.address is not None:
+            where.append(f"{addr_expr} {op} ?")
+            params.append(filter_attributes.address)
+        if filter_attributes.email is not None:
+            where.append(f"c_email_address {op} ?")
+            params.append(filter_attributes.email)
+
+    sql = ("SELECT c_customer_id, "
+           f"{name_expr}, "
+           f"{addr_expr}, "
+           "c_email_address "
+           "FROM customer LEFT JOIN customer_address ON c_current_addr_sk = ca_address_sk")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+
+    customers = []
+    for r in rows:
+        customers.append(Customer(
+            customer_id=r[0].strip() if r[0] is not None else None,
+            name=r[1].strip() if r[1] is not None else None,
+            address=r[2].strip() if r[2] is not None else None,
+            email=r[3].strip() if r[3] is not None else None,
+        ))
+    return customers
 
 
 def get_filtered_rentals(filter_attributes: Rental = None,
@@ -130,7 +234,15 @@ def number_in_stock(item_id: str = None) -> int:
     """
     Returns num_owned - active rentals. Returns -1 if item doesn't exist.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("SELECT i_num_owned FROM item WHERE i_item_id = ?", (item_id,))
+    row = cur.fetchone()
+    if row is None:
+        return -1
+
+    num_owned = row[0]
+    cur.execute("SELECT COUNT(*) FROM rental WHERE item_id = ?", (item_id,))
+    active = cur.fetchone()[0]
+    return num_owned - active
 
 
 def place_in_line(item_id: str = None, customer_id: str = None) -> int:
@@ -151,12 +263,13 @@ def save_changes():
     """
     Commits all changes made to the db.
     """
-    raise NotImplementedError("you must implement this function")
+    conn.commit()
 
 
 def close_connection():
     """
     Closes the cursor and connection.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.close()
+    conn.close()
 
