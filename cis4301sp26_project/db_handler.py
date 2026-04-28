@@ -235,8 +235,16 @@ def get_filtered_items(filter_attributes: Item = None,
         where.append("YEAR(i_rec_start_date) <= ?")
         params.append(max_start_year)
 
+    # TPC-DS historizes items: same i_item_id can appear with multiple i_rec_start_date.
+    # Collapse to the most recent version per item_id so the CLI's existence check
+    # (len(...) == 1) works as expected. JOIN-based dedupe is O(n) vs the
+    # correlated-subquery O(n^2) approach.
     sql = ("SELECT i_item_id, i_product_name, i_brand, i_category, i_manufact, "
-           "i_current_price, YEAR(i_rec_start_date), i_num_owned FROM item")
+           "i_current_price, YEAR(i_rec_start_date), i_num_owned FROM item AS i "
+           "INNER JOIN ("
+           "  SELECT i_item_id AS iid, MAX(i_rec_start_date) AS max_dt "
+           "  FROM item GROUP BY i_item_id"
+           ") AS latest ON i.i_item_id = latest.iid AND i.i_rec_start_date = latest.max_dt")
     if where:
         sql += " WHERE " + " AND ".join(where)
 
@@ -353,7 +361,7 @@ def get_filtered_rentals(filter_attributes: Rental = None,
 
     rentals = []
     for r in rows:
-        rentals.append(RentalHistory(
+        rentals.append(Rental(
             item_id=r[0].strip() if r[0] is not None else None,
             customer_id=r[1].strip() if r[1] is not None else None,
             rental_date=str(r[2]) if r[2] is not None else None,
@@ -446,7 +454,7 @@ def get_filtered_waitlist(filter_attributes: Waitlist = None,
         if filter_attributes.customer_id is not None:
             where.append("customer_id = ?")
             params.append(filter_attributes.customer_id)
-        if filter_attributes.place_in_line is not None:
+        if filter_attributes.place_in_line != -1:
             where.append("place_in_line = ?")
             params.append(filter_attributes.place_in_line)
 
