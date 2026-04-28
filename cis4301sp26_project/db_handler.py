@@ -116,7 +116,6 @@ def edit_customer(original_customer_id: str = None, new_customer: Customer = Non
             (street_number, street_name, city, state, zip_code, addr_sk)
         )
 
-
 def rent_item(item_id: str = None, customer_id: str = None):
     """
     item_id - A string containing the Item ID for the item being rented.
@@ -315,7 +314,52 @@ def get_filtered_rentals(filter_attributes: Rental = None,
     """
     Returns a list of Rental objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    where = []
+    params = []
+
+    if filter_attributes is not None:
+        if filter_attributes.item_id is not None:
+            where.append("item_id = ?")
+            params.append(filter_attributes.item_id)
+        if filter_attributes.customer_id is not None:
+            where.append("customer_id = ?")
+            params.append(filter_attributes.customer_id)
+        if filter_attributes.rental_date is not None:
+            where.append("rental_date = ?")
+            params.append(filter_attributes.rental_date)
+        if filter_attributes.due_date is not None:
+            where.append("due_date = ?")
+            params.append(filter_attributes.due_date)
+
+    if min_rental_date is not None:
+        where.append("rental_date >= ?")
+        params.append(min_rental_date)
+    if max_rental_date is not None:
+        where.append("rental_date <= ?")
+        params.append(max_rental_date)
+    if min_due_date is not None:
+        where.append("due_date >= ?")
+        params.append(min_due_date)
+    if max_due_date is not None:
+        where.append("due_date <= ?")
+        params.append(max_due_date)
+
+    sql = "SELECT item_id, customer_id, rental_date, due_date FROM rental"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+
+    rentals = []
+    for r in rows:
+        rentals.append(RentalHistory(
+            item_id=r[0].strip() if r[0] is not None else None,
+            customer_id=r[1].strip() if r[1] is not None else None,
+            rental_date=str(r[2]) if r[2] is not None else None,
+            due_date=str(r[3]) if r[3] is not None else None,
+        ))
+    return rentals
 
 
 def get_filtered_rental_histories(filter_attributes: RentalHistory = None,
@@ -392,7 +436,42 @@ def get_filtered_waitlist(filter_attributes: Waitlist = None,
     """
     Returns a list of Waitlist objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    where = []
+    params = []
+
+    if filter_attributes is not None:
+        if filter_attributes.item_id is not None:
+            where.append("item_id = ?")
+            params.append(filter_attributes.item_id)
+        if filter_attributes.customer_id is not None:
+            where.append("customer_id = ?")
+            params.append(filter_attributes.customer_id)
+        if filter_attributes.place_in_line is not None:
+            where.append("place_in_line = ?")
+            params.append(filter_attributes.place_in_line)
+
+    if min_place_in_line != -1:
+        where.append("place_in_line >= ?")
+        params.append(min_place_in_line)
+    if max_place_in_line != -1:
+        where.append("place_in_line <= ?")
+        params.append(max_place_in_line)
+
+    sql = "SELECT item_id, customer_id, place_in_line FROM waitlist"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+
+    waitlist = []
+    for r in rows:
+        waitlist.append(Waitlist(
+            item_id=r[0].strip() if r[0] is not None else None,
+            customer_id=r[1].strip() if r[1] is not None else None,
+            place_in_line=int(r[2]) if r[2] is not None else -1,
+        ))
+    return waitlist
 
 
 def number_in_stock(item_id: str = None) -> int:
@@ -414,14 +493,13 @@ def place_in_line(item_id: str = None, customer_id: str = None) -> int:
     """
     Returns the customer's place_in_line, or -1 if not on waitlist.
     """
-    cur.execute(
-        "SELECT place_in_line FROM waitlist WHERE item_id = ? AND customer_id = ?",
-        (item_id, customer_id)
-    )
+    cur.execute("SELECT place_in_line FROM waitlist WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
     row = cur.fetchone()
-    if row is None:
+    if row is not None:
+        place = row[0]
+    else:
         return -1
-    return row[0]
+    return place
 
 
 def line_length(item_id: str = None) -> int:
@@ -448,4 +526,3 @@ def close_connection():
     """
     cur.close()
     conn.close()
-
